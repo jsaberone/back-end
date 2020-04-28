@@ -1,5 +1,6 @@
 package com.kk.rediscluster2.controller;
 
+import com.kk.rediscluster2.config.lettuce.RedisLock;
 import com.kk.rediscluster2.model.CacheBody;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -26,6 +27,9 @@ public class RedisController {
     @Autowired
     private StringRedisTemplate redisTemplate;
 
+    @Autowired
+    private RedisLock redisLock;
+
     @ApiOperation("根据key获取缓存")
     @GetMapping("get/{key}")
     public String getRedisKey(@PathVariable("key") String key){
@@ -47,5 +51,26 @@ public class RedisController {
         return "success";
     }
 
+    @ApiOperation("分布式锁方式设置key")
+    @PostMapping("lock/set")
+    public String redisLock(@RequestBody CacheBody request){
+        String requestId = String.valueOf(request.hashCode());
+        boolean flag = true;
+        while(flag) {
+            if (redisLock.tryLock(requestId, requestId, 2, TimeUnit.SECONDS)) {
+                redisTemplate.opsForValue().set(request.getKey(), request.getVlaue(), request.getExpire(), TimeUnit.SECONDS);
+                System.out.println("请求为 == " + request.toString());
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } finally {
+                    redisLock.releaseLock(requestId, requestId);
+                    flag = false;
+                }
+            }
+        }
+        return "success";
+    }
 
 }
